@@ -13,14 +13,14 @@ class PieceType(enum.Enum):
     KING = 6
 
 class Square(enum.IntEnum):
-    (A1, A2, A3, A4, A5, A6, A7, A8,
-    B1, B2, B3, B4, B5, B6, B7, B8,
-    C1, C2, C3, C4, C5, C6, C7, C8,
-    D1, D2, D3, D4, D5, D6, D7, D8,
-    E1, E2, E3, E4, E5, E6, E7, E8,
-    F1, F2, F3, F4, F5, F6, F7, F8,
-    G1, G2, G3, G4, G5, G6, G7, G8,
-    H1, H2, H3, H4, H5, H6, H7, H8) = range(64)
+    (A8, B8, C8, D8, E8, F8, G8, H8,
+    A7, B7, C7, D7, E7, F7, G7, H7,
+    A6, B6, C6, D6, E6, F6, G6, H6,
+    A5, B5, C5, D5, E5, F5, G5, H5,
+    A4, B4, C4, D4, E4, F4, G4, H4,
+    A3, B3, C3, D3, E3, F3, G3, H3,
+    A2, B2, C2, D2, E2, F2, G2, H2,
+    A1, B1, C1, D1, E1, F1, G1, H1) = range(64)
 
 class Piece():
     def __init__(self, piece_type, piece_color):
@@ -31,44 +31,68 @@ class Chess():
     def __init__(self):
         self.board = [None]*64
         self.player_turn = PlayerColor.WHITE
-        
+        self.castleA1 = True
+        self.castleH1 = True
+        self.castleA8 = True
+        self.castleH8 = True
         ## Initial state of the board ##
 
         self.board[Square.A1] = Piece(PieceType.ROOK, PlayerColor.WHITE)
-        self.board[Square.A2] = Piece(PieceType.KNIGHT, PlayerColor.WHITE)
-        self.board[Square.A3] = Piece(PieceType.BISHOP, PlayerColor.WHITE)
-        self.board[Square.A4] = Piece(PieceType.KING, PlayerColor.WHITE)
-        self.board[Square.A5] = Piece(PieceType.QUEEN, PlayerColor.WHITE)
-        self.board[Square.A6] = Piece(PieceType.BISHOP, PlayerColor.WHITE)
-        self.board[Square.A7] = Piece(PieceType.KNIGHT, PlayerColor.WHITE)
-        self.board[Square.A8] = Piece(PieceType.ROOK, PlayerColor.WHITE)
-        self.board[Square.B1] = Piece(PieceType.PAWN, PlayerColor.WHITE)
+        self.board[Square.B1] = Piece(PieceType.KNIGHT, PlayerColor.WHITE)
+        self.board[Square.C1] = Piece(PieceType.BISHOP, PlayerColor.WHITE)
+        self.board[Square.D1] = Piece(PieceType.QUEEN, PlayerColor.WHITE)
+        self.board[Square.E1] = Piece(PieceType.KING, PlayerColor.WHITE)
+        self.board[Square.F1] = Piece(PieceType.BISHOP, PlayerColor.WHITE)
+        self.board[Square.G1] = Piece(PieceType.KNIGHT, PlayerColor.WHITE)
+        self.board[Square.H1] = Piece(PieceType.ROOK, PlayerColor.WHITE)
+        self.board[Square.A2] = Piece(PieceType.PAWN, PlayerColor.WHITE)
         self.board[Square.B2] = Piece(PieceType.PAWN, PlayerColor.WHITE)
-        self.board[Square.B3] = Piece(PieceType.PAWN, PlayerColor.WHITE)
-        self.board[Square.B4] = Piece(PieceType.PAWN, PlayerColor.WHITE)
-        self.board[Square.B5] = Piece(PieceType.PAWN, PlayerColor.WHITE)
-        self.board[Square.B6] = Piece(PieceType.PAWN, PlayerColor.WHITE)
-        self.board[Square.B7] = Piece(PieceType.PAWN, PlayerColor.WHITE)
-        self.board[Square.B8] = Piece(PieceType.PAWN, PlayerColor.WHITE)
+        self.board[Square.C2] = Piece(PieceType.PAWN, PlayerColor.WHITE)
+        self.board[Square.D2] = Piece(PieceType.PAWN, PlayerColor.WHITE)
+        self.board[Square.E2] = Piece(PieceType.PAWN, PlayerColor.WHITE)
+        self.board[Square.F2] = Piece(PieceType.PAWN, PlayerColor.WHITE)
+        self.board[Square.G2] = Piece(PieceType.PAWN, PlayerColor.WHITE)
+        self.board[Square.H2] = Piece(PieceType.PAWN, PlayerColor.WHITE)
 
-        self.board[Square.H1] = Piece(PieceType.ROOK, PlayerColor.BLACK)
-        self.board[Square.H2] = Piece(PieceType.KNIGHT, PlayerColor.BLACK)
-        self.board[Square.H3] = Piece(PieceType.BISHOP, PlayerColor.BLACK)
-        self.board[Square.H4] = Piece(PieceType.KING, PlayerColor.BLACK)
-        self.board[Square.H5] = Piece(PieceType.QUEEN, PlayerColor.BLACK)
-        self.board[Square.H6] = Piece(PieceType.BISHOP, PlayerColor.BLACK)
-        self.board[Square.H7] = Piece(PieceType.KNIGHT, PlayerColor.BLACK)
+        self.board[Square.A8] = Piece(PieceType.ROOK, PlayerColor.BLACK)
+        self.board[Square.B8] = Piece(PieceType.KNIGHT, PlayerColor.BLACK)
+        self.board[Square.C8] = Piece(PieceType.BISHOP, PlayerColor.BLACK)
+        self.board[Square.D8] = Piece(PieceType.QUEEN, PlayerColor.BLACK)
+        self.board[Square.E8] = Piece(PieceType.KING, PlayerColor.BLACK)
+        self.board[Square.F8] = Piece(PieceType.BISHOP, PlayerColor.BLACK)
+        self.board[Square.G8] = Piece(PieceType.KNIGHT, PlayerColor.BLACK)
         self.board[Square.H8] = Piece(PieceType.ROOK, PlayerColor.BLACK)
-        self.board[Square.G1] = Piece(PieceType.PAWN, PlayerColor.BLACK)
-        self.board[Square.G2] = Piece(PieceType.PAWN, PlayerColor.BLACK)
-        self.board[Square.G3] = Piece(PieceType.PAWN, PlayerColor.BLACK)
-        self.board[Square.G4] = Piece(PieceType.PAWN, PlayerColor.BLACK)
-        self.board[Square.G5] = Piece(PieceType.PAWN, PlayerColor.BLACK)
-        self.board[Square.G6] = Piece(PieceType.PAWN, PlayerColor.BLACK)
+        self.board[Square.A7] = Piece(PieceType.PAWN, PlayerColor.BLACK)
+        self.board[Square.B7] = Piece(PieceType.PAWN, PlayerColor.BLACK)
+        self.board[Square.C7] = Piece(PieceType.PAWN, PlayerColor.BLACK)
+        self.board[Square.D7] = Piece(PieceType.PAWN, PlayerColor.BLACK)
+        self.board[Square.E7] = Piece(PieceType.PAWN, PlayerColor.BLACK)
+        self.board[Square.F7] = Piece(PieceType.PAWN, PlayerColor.BLACK)
         self.board[Square.G7] = Piece(PieceType.PAWN, PlayerColor.BLACK)
-        self.board[Square.G8] = Piece(PieceType.PAWN, PlayerColor.BLACK)
+        self.board[Square.H7] = Piece(PieceType.PAWN, PlayerColor.BLACK)
 
     def move(self, square_from, square_to):
+        ## check castling ##
+        if self.board[square_from].piece_type == PieceType.KING:
+            if self.player_turn == PlayerColor.WHITE:
+                if self.castleA1 or self.castleH1:
+                    self.castleA1 = False
+                    self.castleH1 = False
+            else:
+                if self.castleA8 or self.castleH8:
+                    self.castleA8 = False
+                    self.castleH8 = False
+        elif self.board[square_from].piece_type == PieceType.ROOK:
+            if square_from == Square.A1 and self.castleA1:
+                self.castleA1 = False
+            elif square_from == Square.H1 and self.castleH1:
+                self.castleH1 = False
+            elif square_from == Square.A8 and self.castleA8:
+                self.castleA8 = False
+            elif square_from == Square.H8 and self.castleH8:
+                self.castleH8 = False
+
+        ## move and pass turn ##
         self.board[square_to] = self.board[square_from]
         self.board[square_from] = None
         
@@ -104,30 +128,30 @@ class Chess():
 
         if self.player_turn == PlayerColor.WHITE:
             ## check if pawn can capture ##
-            if square % 8 != 0 and self.board[square + 7] != None:
-                if self.board[square + 7].piece_color != self.player_turn:
-                    moves.append(square + 7)
-            if (square + 1) % 8 != 0 and self.board[square + 9] != None:
-                if self.board[square + 9].piece_color != self.player_turn:
-                    moves.append(square + 9)
-            ## check if pawn can advance ##
-            if self.board[square + 8] == None:
-                moves.append(square + 8)
-                if self.board[square + 16] == None and square < Square.C1:
-                    moves.append(square + 16)
-        else:
-            ## check if pawn can capture ##
-            if square % 8 != 0 and self.board[square - 9] != None:
-                if self.board[square - 9].piece_color != self.player_turn:
-                    moves.append(square - 9)
-            if (square + 1) % 8 != 0 and self.board[square - 7] != None:
+            if square % 8 != 0 and self.board[square - 7] != None:
                 if self.board[square - 7].piece_color != self.player_turn:
                     moves.append(square - 7)
+            if (square + 1) % 8 != 0 and self.board[square - 9] != None:
+                if self.board[square - 9].piece_color != self.player_turn:
+                    moves.append(square - 9)
             ## check if pawn can advance ##
             if self.board[square - 8] == None:
                 moves.append(square - 8)
-                if self.board[square - 16] == None and square > Square.F8:
+                if self.board[square - 16] == None and square > Square.H3:
                     moves.append(square - 16)
+        else:
+            ## check if pawn can capture ##
+            if square % 8 != 0 and self.board[square + 9] != None:
+                if self.board[square + 9].piece_color != self.player_turn:
+                    moves.append(square + 9)
+            if (square + 1) % 8 != 0 and self.board[square + 7] != None:
+                if self.board[square + 7].piece_color != self.player_turn:
+                    moves.append(square + 7)
+            ## check if pawn can advance ##
+            if self.board[square + 8] == None:
+                moves.append(square + 8)
+                if self.board[square + 16] == None and square < Square.A6:
+                    moves.append(square + 16)
         
         return moves
 
@@ -135,26 +159,26 @@ class Chess():
         moves = []
 
         if square % 8 != 0:
-            if square < Square.G1:
+            if square < Square.A2:
                 if self.board[square + 15] != None:
                     if self.board[square + 15].piece_color != self.player_turn:
                         moves.append(square + 15)
                 else:
                     moves.append(square + 15)
-            if square > Square.B8:
+            if square > Square.H7:
                 if self.board[square - 17] != None:
                     if self.board[square - 17].piece_color != self.player_turn:
                         moves.append(square - 17)
                 else:
                     moves.append(square - 17)
             if (square - 1) % 8 != 0:
-                if square > Square.A8:
+                if square > Square.H8:
                     if self.board[square - 10] != None:
                         if self.board[square - 10].piece_color != self.player_turn:
                             moves.append(square - 10)
                     else:
                         moves.append(square - 10)
-                if square < Square.H1:
+                if square < Square.A1:
                     if self.board[square + 6] != None:
                         if self.board[square + 6].piece_color != self.player_turn:
                             moves.append(square + 6)
@@ -162,26 +186,26 @@ class Chess():
                         moves.append(square + 6)
         
         if (square + 1) % 8 != 0:
-            if square < Square.G1:
+            if square < Square.A2:
                 if self.board[square + 17] != None:
                     if self.board[square + 17].piece_color != self.player_turn:
                         moves.append(square + 17)
                 else:
                     moves.append(square + 17)
-            if square > Square.B8:
+            if square > Square.H7:
                 if self.board[square - 15] != None:
                     if self.board[square - 15].piece_color != self.player_turn:
                         moves.append(square - 15)
                 else:
                     moves.append(square - 15)
             if (square + 2) % 8 != 0:
-                if square < Square.H1:
+                if square < Square.A1:
                     if self.board[square + 10] != None:
                         if self.board[square + 10].piece_color != self.player_turn:
                             moves.append(square + 10)
                     else:
                         moves.append(square + 10)
-                if square > Square.A8:
+                if square > Square.H8:
                     if self.board[square - 6] != None:
                         if self.board[square - 6].piece_color != self.player_turn:
                             moves.append(square - 6)
@@ -290,13 +314,13 @@ class Chess():
             else:
                 moves.append(square - 1)
             ## diagonals ##
-            if square > Square.A8:
+            if square > Square.H8:
                 if self.board[square - 9] != None:
                     if self.board[square - 9].piece_color != self.player_turn:
                         moves.append(square - 9)
                 else:
                     moves.append(square - 9)
-            if square < Square.H1:
+            if square < Square.A1:
                 if self.board[square + 7] != None:
                     if self.board[square + 7].piece_color != self.player_turn:
                         moves.append(square + 7)
@@ -310,31 +334,43 @@ class Chess():
             else:
                 moves.append(square + 1)
             ## diagonals ##
-            if square > Square.A8:
+            if square > Square.H8:
                 if self.board[square - 7] != None:
                     if self.board[square - 7].piece_color != self.player_turn:
                         moves.append(square - 7)
                 else:
                     moves.append(square - 7)
-            if square < Square.H1:
+            if square < Square.A1:
                 if self.board[square + 9] != None:
                     if self.board[square + 9].piece_color != self.player_turn:
                         moves.append(square + 9)
                 else:
                     moves.append(square + 9)
 
-        if square > Square.A8:
+        if square > Square.H8:
             if self.board[square - 8] != None:
                 if self.board[square - 8].piece_color != self.player_turn:
                     moves.append(square - 8)
             else:
                 moves.append(square - 8)
-        if square < Square.H1:
+        if square < Square.A1:
             if self.board[square + 8] != None:
                 if self.board[square + 8].piece_color != self.player_turn:
                     moves.append(square + 8)
             else:
                 moves.append(square + 8)
+
+        ## check castling ##
+        if self.player_turn == PlayerColor.WHITE:
+            if self.board[Square.B1] is None and self.board[Square.C1] is None and self.board[Square.D1] is None and self.castleA1:
+                moves.append(Square.C1)
+            if self.board[Square.F1] is None and self.board[Square.G1] is None and self.castleH1:
+                moves.append(Square.G1)
+        else:
+            if self.board[Square.B8] is None and self.board[Square.C8] is None and self.board[Square.D8] is None and self.castleA8:
+                moves.append(Square.C8)
+            if self.board[Square.F8] is None and self.board[Square.G8] is None and self.castleH8:
+                moves.append(Square.G8)
 
         return moves
 
