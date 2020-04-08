@@ -78,10 +78,23 @@ class Chess():
                 if self.castleA1 or self.castleH1:
                     self.castleA1 = False
                     self.castleH1 = False
+                    print(square_from - square_to)
+                    if (square_from - square_to) == 2:
+                        self.board[Square.D1] = self.board[Square.A1]
+                        self.board[Square.A1] = None
+                    elif (square_from - square_to) == -2:
+                        self.board[Square.F1] = self.board[Square.H1]
+                        self.board[Square.H1] = None
             else:
                 if self.castleA8 or self.castleH8:
                     self.castleA8 = False
                     self.castleH8 = False
+                    if (square_from - square_to) == 2:
+                        self.board[Square.D8] = self.board[Square.A8]
+                        self.board[Square.A8] = None
+                    elif (square_from - square_to) == -2:
+                        self.board[Square.F8] = self.board[Square.H8]
+                        self.board[Square.H8] = None
         elif self.board[square_from].piece_type == PieceType.ROOK:
             if square_from == Square.A1 and self.castleA1:
                 self.castleA1 = False
@@ -128,12 +141,12 @@ class Chess():
 
         if self.player_turn == PlayerColor.WHITE:
             ## check if pawn can capture ##
-            if square % 8 != 0 and self.board[square - 7] != None:
-                if self.board[square - 7].piece_color != self.player_turn:
-                    moves.append(square - 7)
-            if (square + 1) % 8 != 0 and self.board[square - 9] != None:
+            if square % 8 != 0 and self.board[square - 9] != None:
                 if self.board[square - 9].piece_color != self.player_turn:
                     moves.append(square - 9)
+            if (square + 1) % 8 != 0 and self.board[square - 7] != None:
+                if self.board[square - 7].piece_color != self.player_turn:
+                    moves.append(square - 7)
             ## check if pawn can advance ##
             if self.board[square - 8] == None:
                 moves.append(square - 8)
