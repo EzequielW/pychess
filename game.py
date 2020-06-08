@@ -2,7 +2,7 @@ import os
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide" 
 import pygame
 import math
-from engine import Engine, Piece
+from engine import Engine, Piece, Square
 
 SIZE = MAX_WIDTH, MAX_HEIGHT = 576, 576 
 FPS = 200
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     pieces_images = [[w_pawn_image, w_knight_image, w_bishop_image, w_rook_image, w_queen_image, w_king_image],
                          [b_pawn_image, b_knight_image, b_bishop_image, b_rook_image, b_queen_image, b_king_image]]
 
-    moves = chess_game.get_legal_moves()
+    moves = chess_game.get_legal_moves(chess_game.player_turn)
     board = chess_game.get_all_pieces() 
     piece_moves = None
     piece_square = None
@@ -60,16 +60,16 @@ if __name__ == "__main__":
                 run = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = pygame.mouse.get_pos()
-                square = 63 - (mouse_pos[0]//(MAX_WIDTH//8) + 8*(mouse_pos[1]//(MAX_HEIGHT//8)))
+                square =  63 - 7 + (mouse_pos[0]//(MAX_WIDTH//8) - 8*(mouse_pos[1]//(MAX_HEIGHT//8))) 
                 piece = moves[square]
+                piece_square = square
                 if piece:
                     piece_moves = piece
-                    piece_square = square
                 elif piece_moves != None:
                     for move in piece_moves:
                         if move.square_to == square:
                             chess_game.move(move)
-                            moves = chess_game.get_legal_moves()
+                            moves = chess_game.get_legal_moves(chess_game.player_turn)
                             board = chess_game.get_all_pieces() 
                     piece_moves = None
                     piece_square = None
@@ -79,39 +79,41 @@ if __name__ == "__main__":
                     
 
         square_color = ((115,0,0))
-        for i in range(64):
-            ## draw squares ##
-            pos_x = (MAX_WIDTH//8) * (i % 8)
-            pos_y = (MAX_HEIGHT//8) * math.floor(i/8)
-  
-            if (i // 8 % 2) == 0:
-                if i % 2 == 0:
-                    square_color = ((255,235,205)) 
+        for i in range(8):
+            for j in range(8):
+                square = i*8 + 7 - j
+                ## draw squares ##
+                pos_x = (MAX_WIDTH//8) * ((63 - square) % 8)
+                pos_y = (MAX_HEIGHT//8) * math.floor((square)/8)
+    
+                if (square // 8 % 2) == 0:
+                    if square % 2 == 0:
+                        square_color = ((255,235,205)) 
+                    else:
+                        square_color = ((222,184,135))
                 else:
-                    square_color = ((222,184,135))
-            else:
-                if i % 2 == 0:
-                    square_color = ((222,184,135))
-                else:
-                    square_color = ((255,235,205))
-            
-            if (63 - i) == piece_square:
-                square_color = ((0,225,120))
+                    if square % 2 == 0:
+                        square_color = ((222,184,135))
+                    else:
+                        square_color = ((255,235,205))
                 
-            pygame.draw.rect(win,square_color,(pos_x, pos_y, MAX_HEIGHT//8, MAX_HEIGHT//8))
+                if (63 - square) == piece_square:
+                    square_color = ((0,225,120))
+                    
+                pygame.draw.rect(win,square_color,(pos_x, pos_y, MAX_HEIGHT//8, MAX_HEIGHT//8))
 
-            ## draw pieces ##
-            piece_x = pos_x + scale_offset
-            piece_y = pos_y + scale_offset
+                ## draw pieces ##
+                piece_x = pos_x + scale_offset
+                piece_y = pos_y + scale_offset
 
-            if board[Piece.WHITE][63 - i] != None:
-                win.blit(pieces_images[Piece.WHITE][board[Piece.WHITE][63-i]-2], (piece_x, piece_y))
-            elif board[Piece.BLACK][63 - i] != None:
-                win.blit(pieces_images[Piece.BLACK][board[Piece.BLACK][63-i]-2], (piece_x, piece_y))   
+                if board[Piece.WHITE][63 - square] != None:
+                    win.blit(pieces_images[Piece.WHITE][board[Piece.WHITE][63 - square]-2], (piece_x, piece_y))
+                elif board[Piece.BLACK][63 - square] != None:
+                    win.blit(pieces_images[Piece.BLACK][board[Piece.BLACK][63 - square]-2], (piece_x, piece_y))   
 
         if piece_moves != None:
             for move in piece_moves:
-                pos_x = (MAX_WIDTH//8) * ((63 - move.square_to) % 8)
+                pos_x = (MAX_WIDTH//8) * ((move.square_to % 8))
                 pos_y = (MAX_HEIGHT//8) * math.floor((63 - move.square_to)/8)
                 pos_x = (pos_x + MAX_HEIGHT//16)
                 pos_y = (pos_y + MAX_HEIGHT//16)

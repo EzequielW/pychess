@@ -32,13 +32,14 @@ class Direction(enum.IntEnum):
     SOUTH_WEST = 7
 
 class Move():
-    def __init__(self, piece_color, piece_type, square_from, square_to, cpiece_color = None, cpiece_type = None):
+    def __init__(self, piece_color, piece_type, square_from, square_to, cpiece_color = None, cpiece_type = None, castle = False):
         self.piece_color = piece_color
         self.piece_type = piece_type
         self.square_from = square_from
         self.square_to = square_to
         self.cpiece_color = cpiece_color
         self.cpiece_type = cpiece_type
+        self.castle = castle
     
     def is_capture(self):
         if self.cpiece_color is not None:
@@ -103,6 +104,9 @@ class Engine():
         black_rook = self.get_piece_set(Piece.BLACK, Piece.ROOK)
         black_queen = self.get_piece_set(Piece.BLACK, Piece.QUEEN)
         black_king = self.get_piece_set(Piece.BLACK, Piece.KING)
+
+        self.white_pieces = np.bitwise_or.reduce([white_pawn, white_knight, white_bishop, white_rook, white_queen, white_king])
+        self.black_pieces = np.bitwise_or.reduce([black_pawn, black_knight, black_bishop, black_rook, black_queen, black_king])
             
         for j in range(64):
             if (white_pawn >> np.uint64(j)) % 2 == 1:
@@ -148,8 +152,56 @@ class Engine():
 
         return i
 
-    ## Play a move ##
-    def move(self, move):      
+    #Play a move
+    def move(self, move):
+        #Check if move is castling and move the rook   
+        if move.castle:
+            rook_square_from = 0
+            rook_square_to = 0
+            if move.square_to == Square.G1:
+                rook_square_from = Square.H1
+                rook_square_to = Square.F1
+            elif move.square_to == Square.C1:
+                rook_square_from = Square.A1
+                rook_square_to = Square.D1
+            elif move.square_to == Square.G8:
+                rook_square_from = Square.H8
+                rook_square_to = Square.F8
+            else:
+                rook_square_from = Square.A8
+                rook_square_to = Square.D8
+
+            fromBB = np.uint64(1) << np.uint64(rook_square_from)
+            toBB = np.uint64(1) << np.uint64(rook_square_to)
+            fromToBB = np.bitwise_xor(fromBB, toBB)
+            self.pieceBB[move.piece_color] = np.bitwise_xor(fromToBB, self.pieceBB[move.piece_color])
+            self.pieceBB[Piece.ROOK] = np.bitwise_xor(fromToBB, self.pieceBB[Piece.ROOK])
+
+            if move.piece_color == Piece.WHITE:
+                self.castleA1 = False
+                self.castleH1 = False
+            else:
+                self.castleA8 = False
+                self.castleH8 = False
+        #Check if the king move and disable castling
+        elif move.piece_type == Piece.KING:
+            if move.piece_color == Piece.WHITE:
+                self.castleA1 = False
+                self.castleH1 = False
+            else:
+                self.castleA8 = False
+                self.castleH8 = False
+        #Check which rook move and disable castling
+        elif move.piece_type == Piece.ROOK:  
+            if move.square_from == Square.A1:
+                self.castleA1 = False
+            elif move.square_from == Square.H1:
+                self.castleH1 = False
+            elif move.square_from == Square.A8:
+                self.castleA8 = False
+            elif move.square_from == Square.H8:
+                self.castleH8 = False
+
         fromBB = np.uint64(1) << np.uint64(move.square_from)
         toBB = np.uint64(1) << np.uint64(move.square_to)
         fromToBB = np.bitwise_xor(fromBB, toBB)
@@ -158,11 +210,12 @@ class Engine():
             self.pieceBB[move.cpiece_color] = np.bitwise_xor(toBB, self.pieceBB[move.cpiece_color])
             self.pieceBB[move.cpiece_type] = np.bitwise_xor(toBB, self.pieceBB[move.cpiece_type])
 
+        # self.draw_bin(self.pieceBB[move.piece_color])
+        # self.draw_bin(self.pieceBB[move.piece_type])
         self.pieceBB[move.piece_color] = np.bitwise_xor(fromToBB, self.pieceBB[move.piece_color])
         self.pieceBB[move.piece_type] = np.bitwise_xor(fromToBB, self.pieceBB[move.piece_type])
 
-        
-
+        #Switch player turn
         if self.player_turn == Piece.WHITE:
             self.player_turn = Piece.BLACK
         else:
@@ -194,60 +247,94 @@ class Engine():
         return  square >= Square.A8 and square <= Square.H8
 
     ## Returns all the legal moves on the current board given the players_turn ##
-    def get_legal_moves(self):
+    def get_legal_moves(self, player_color):
         moves = [None] * 64
-
-        white_pawn = self.get_piece_set(Piece.WHITE, Piece.PAWN)
-        white_knight = self.get_piece_set(Piece.WHITE, Piece.KNIGHT)
-        white_bishop = self.get_piece_set(Piece.WHITE, Piece.BISHOP)
-        white_rook = self.get_piece_set(Piece.WHITE, Piece.ROOK)
-        white_queen = self.get_piece_set(Piece.WHITE, Piece.QUEEN)
-        white_king = self.get_piece_set(Piece.WHITE, Piece.KING)
-
-        self.white_pieces = np.bitwise_or.reduce([white_pawn, white_knight, white_bishop, white_rook, white_queen, white_king])
-
-        black_pawn = self.get_piece_set(Piece.BLACK, Piece.PAWN)
-        black_knight = self.get_piece_set(Piece.BLACK, Piece.KNIGHT)
-        black_bishop = self.get_piece_set(Piece.BLACK, Piece.BISHOP)
-        black_rook = self.get_piece_set(Piece.BLACK, Piece.ROOK)
-        black_queen = self.get_piece_set(Piece.BLACK, Piece.QUEEN)
-        black_king = self.get_piece_set(Piece.BLACK, Piece.KING)
-
-        self.black_pieces = np.bitwise_or.reduce([black_pawn, black_knight, black_bishop, black_rook, black_queen, black_king])
 
         self.all_pieces = self.get_all_pieces()
 
         for i in range(len(moves)):
-            square_moves = []
-            if self.player_turn == Piece.WHITE:
-                if (white_pawn >> np.uint64(i)) % 2 == 1:
-                    square_moves = self.get_pawn_legal(Piece.WHITE, i)
-                elif (white_knight >> np.uint64(i)) % 2 == 1:
-                    square_moves = self.get_knight_legal(Piece.WHITE, i)
-                elif (white_bishop >> np.uint64(i)) % 2 == 1:
-                    avoid_directions = [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]
-                    square_moves = self.get_sliding_legal(Piece.WHITE, i, Piece.BISHOP, avoid_directions)
-                elif (white_rook >> np.uint64(i)) % 2 == 1:
-                    avoid_directions = [Direction.NORTH_EAST, Direction.NORTH_WEST, Direction.SOUTH_EAST, Direction.SOUTH_WEST]
-                    square_moves = self.get_sliding_legal(Piece.WHITE, i, Piece.ROOK, avoid_directions)
-                elif (white_queen >> np.uint64(i)) % 2 == 1:
-                    square_moves = self.get_sliding_legal(Piece.WHITE, i, Piece.QUEEN, [])
+            square_moves = None
 
-            else:
-                if (black_pawn >> np.uint64(i)) % 2 == 1:
-                    square_moves = self.get_pawn_legal(Piece.BLACK, i)
-                elif (black_knight >> np.uint64(i)) % 2 == 1:
-                    square_moves = self.get_knight_legal(Piece.BLACK, i)
-                elif (black_bishop >> np.uint64(i)) % 2 == 1:
-                    avoid_directions = [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]
-                    square_moves = self.get_sliding_legal(Piece.BLACK, i, Piece.BISHOP, avoid_directions)
-                elif (black_rook >> np.uint64(i)) % 2 == 1:
-                    avoid_directions = [Direction.NORTH_EAST, Direction.NORTH_WEST, Direction.SOUTH_EAST, Direction.SOUTH_WEST]
-                    square_moves = self.get_sliding_legal(Piece.BLACK, i, Piece.ROOK, avoid_directions)
-                elif (black_queen >> np.uint64(i)) % 2 == 1:
-                    square_moves = self.get_sliding_legal(Piece.BLACK, i, Piece.QUEEN, [])
+            if self.all_pieces[player_color][i] == Piece.PAWN:
+                square_moves = self.get_pawn_legal(player_color, i)
+            elif self.all_pieces[player_color][i] == Piece.KNIGHT:
+                square_moves = self.get_knight_legal(player_color, i)
+            elif self.all_pieces[player_color][i] == Piece.BISHOP:
+                avoid_directions = [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]
+                square_moves = self.get_sliding_legal(player_color, i, Piece.BISHOP, avoid_directions)
+            elif self.all_pieces[player_color][i] == Piece.ROOK:
+                avoid_directions = [Direction.NORTH_EAST, Direction.NORTH_WEST, Direction.SOUTH_EAST, Direction.SOUTH_WEST]
+                square_moves = self.get_sliding_legal(player_color, i, Piece.ROOK, avoid_directions)
+            elif self.all_pieces[player_color][i] == Piece.QUEEN:
+                square_moves = self.get_sliding_legal(player_color, i, Piece.QUEEN, [])
+            elif self.all_pieces[player_color][i] == Piece.KING:
+                square_moves = self.get_king_legal(player_color, i)
 
             moves[i] = square_moves
+        return moves
+
+    ## Get king legal moves ##
+    def get_king_legal(self, color, square_from):
+        moves = []
+        opp_pieces = None
+        opp_color = None
+
+        #Set opposite color and check if it can castle either side
+        if color == Piece.WHITE:
+            opp_pieces = self.black_pieces
+            opp_color = Piece.BLACK
+            if self.castleA1:
+                castle_path = self.ray_moves[square_from][Direction.WEST]
+                all_set = np.bitwise_or(self.white_pieces, self.black_pieces)
+                castle_path = np.bitwise_and(castle_path, all_set)
+                if castle_path == np.uint64(1):
+                    move = Move(color, Piece.KING, square_from, Square.C1, castle = True)
+                    moves.append(move)
+            if self.castleH1:
+                castle_path = self.ray_moves[square_from][Direction.EAST]
+                all_set = np.bitwise_or(self.white_pieces, self.black_pieces)
+                castle_path = np.bitwise_and(castle_path, all_set)
+                if castle_path == np.uint64(128):
+                    move = Move(color, Piece.KING, square_from, Square.G1, castle = True)
+                    moves.append(move)
+        else:
+            opp_pieces = self.white_pieces
+            opp_color = Piece.WHITE
+            if self.castleA8:
+                castle_path = self.ray_moves[square_from][Direction.WEST]
+                all_set = np.bitwise_or(self.white_pieces, self.black_pieces)
+                castle_path = np.bitwise_and(castle_path, all_set)
+                if castle_path == np.uint64(72057594037927936):
+                    move = Move(color, Piece.KING, square_from, Square.C8, castle = True)
+                    moves.append(move)
+            if self.castleH8:
+                castle_path = self.ray_moves[square_from][Direction.EAST]
+                all_set = np.bitwise_or(self.white_pieces, self.black_pieces)
+                castle_path = np.bitwise_and(castle_path, all_set)
+                if castle_path == np.uint64(9223372036854775808):
+                    move = Move(color, Piece.KING, square_from, Square.G8, castle = True)
+                    moves.append(move)
+
+        #Check for capture moves
+        capture_moves = np.bitwise_and(self.king_moves[square_from], opp_pieces)
+        while capture_moves > 0:
+            square_to = self.get_lsb(capture_moves)
+            captured_piece = self.all_pieces[opp_color][square_to]
+            move = Move(color, Piece.KING, square_from, square_to, opp_color, captured_piece)
+            moves.append(move)
+            square_to = np.uint64(1) << np.uint64(square_to)
+            capture_moves = np.bitwise_xor(capture_moves, square_to)
+
+        #Check for push moves
+        all_set = np.bitwise_or(self.white_pieces, self.black_pieces)
+        push_moves = np.bitwise_and(self.king_moves[square_from], np.bitwise_not(all_set))
+        while push_moves > 0:
+            square_to = self.get_lsb(push_moves)
+            move = Move(color, Piece.KING, square_from, square_to)
+            moves.append(move)
+            square_to = np.uint64(1) << np.uint64(square_to)
+            push_moves = np.bitwise_xor(push_moves, square_to)
+
         return moves
 
     ## Get pawn legal moves ##
@@ -273,9 +360,20 @@ class Engine():
             square_to = np.uint64(1) << np.uint64(square_to)
             capture_moves = np.bitwise_xor(capture_moves, square_to)
 
+        ## Check pawn blockers ##
+        all_set = np.bitwise_or(self.white_pieces, self.black_pieces)
+        blocker_mask = np.bitwise_and(self.pawn_pushes[square_from][color], all_set)
+        blocker_square = None
+        if blocker_mask > 0:
+            if color == Piece.WHITE:
+                blocker_square = self.get_msb(blocker_mask)
+            else:
+                blocker_square = self.get_lsb(blocker_mask)
+            blocker_mask = np.bitwise_or(self.pawn_pushes[blocker_square][color], blocker_mask)
+
         ## Check for push moves ##
-        blocker_mask = np.bitwise_and(self.pawn_pushes[square_from][color], opp_pieces)
-        push_moves = np.bitwise_xor(blocker_mask, self.pawn_pushes[square_from][color])
+        push_moves = np.bitwise_and(blocker_mask, self.pawn_pushes[square_from][color])
+        push_moves = np.bitwise_xor(push_moves, self.pawn_pushes[square_from][color])
         while push_moves > 0:
             square_to = self.get_lsb(push_moves)
             move = Move(color, Piece.PAWN, square_from, square_to)
@@ -524,6 +622,7 @@ class Engine():
 
         return moves
     
+    #Utility function to print bitboard
     def draw_bin(self, number):
         number = "{0:b}".format(number).zfill(64)
         for i in range(8):
@@ -531,21 +630,6 @@ class Engine():
                 print(number[(i*8 + 7-j)], end="")
             print("")
         print("")
-
-if __name__ == "__main__":
-    chess_game = Engine()
-
-    new_move = Move(Piece.WHITE, Piece.PAWN, Square.A2, Square.A4)
-
-    chess_game.move(new_move)
-
-    new_move = Move(Piece.BLACK, Piece.PAWN, Square.B7, Square.B5)
-
-    chess_game.move(new_move)
-
-    current_board = np.binary_repr(chess_game.pawn_pushes[Square.H7][Piece.BLACK], width=64)
-
-    print(chess_game.get_all_pieces())
     
     
 
