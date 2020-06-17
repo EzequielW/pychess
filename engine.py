@@ -1,5 +1,7 @@
 import enum
 import numpy as np
+import pickle
+import os
 
 class Piece(enum.IntEnum):
     WHITE = 0
@@ -56,11 +58,24 @@ class Engine():
         self.castleH8 = True
         self.knight_moves = [None]*64
         self.ray_moves = [None]*64
+        self.bishop_masks = [None]*64
+        self.rook_masks = [None]*64
         self.king_moves = [None]*64
         self.pawn_attacks = [None]*64
         self.pawn_pushes = [None]*64
+        self.bishop_moveboard = [None]*64
+        self.rook_moveboard = [None]*64
+        self.move_history = []
         ## Initial Bitboard for piece and color ##
         ## Order by white, black, pawn, knight, bishop, rook, queen and king ##
+
+        # Load rook and bishop blockerboard to moveboard dictionaries
+        if os.path.isfile("piece_movement.json"):
+            print("---- loading piece movement ----")
+            with (open('piece_movement.json', 'rb')) as openfile:
+                piece_moveboard = pickle.load(openfile)
+                self.rook_moveboard = piece_moveboard['rook_moveboard']
+                self.bishop_moveboard = piece_moveboard['bishop_moveboard']
 
         self.pieceBB = np.array((65535,
                                 18446462598732840960,
@@ -74,36 +89,49 @@ class Engine():
         for i in range(64):
             self.knight_moves[i] = self.get_knight_moves(i)
             self.ray_moves[i] = self.get_ray_moves(i)
+            self.rook_masks[i] = self.get_rook_mask(i)
+            self.bishop_masks[i] = self.get_bishop_mask(i)
             self.king_moves[i] = self.get_king_moves(i)
             self.pawn_attacks[i] = self.get_pawn_attacks(i)
             self.pawn_pushes[i] = self.get_pawn_pushes(i)
+
+        if not os.path.isfile("piece_movement.json"):
+            print("---- dumping piece movement ----")
+
+            # Genereta all dictionaries for rook and bishops
+            for i in range(64):
+                self.rook_moveboard[i] = self.get_rook_attacks(i)
+                self.bishop_moveboard[i] = self.get_bishop_attacks(i)
+
+            piece_movement = {}
+            piece_movement['rook_moveboard'] = self.rook_moveboard
+            piece_movement['bishop_moveboard'] = self.bishop_moveboard
+
+            with open('piece_movement.json', 'wb') as outfile:
+                pickle.dump(piece_movement, outfile)
         
         ## Variables to avoid generating sets again ##
         self.white_pieces = None
         self.black_pieces = None
         self.all_pieces = None
 
-    ## Get join set between any two sets ##
-    def get_piece_set(self, first_set, second_set):
-        return np.bitwise_and(self.pieceBB[first_set], self.pieceBB[second_set])
-
     ## Get all pieces sets ##
     def get_all_pieces(self):
         pieces = [[None]*64 for n in range(2)]
 
-        white_pawn = self.get_piece_set(Piece.WHITE, Piece.PAWN)
-        white_knight = self.get_piece_set(Piece.WHITE, Piece.KNIGHT)
-        white_bishop = self.get_piece_set(Piece.WHITE, Piece.BISHOP)
-        white_rook = self.get_piece_set(Piece.WHITE, Piece.ROOK)
-        white_queen = self.get_piece_set(Piece.WHITE, Piece.QUEEN)
-        white_king = self.get_piece_set(Piece.WHITE, Piece.KING)
+        white_pawn = np.bitwise_and(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.PAWN])
+        white_knight = np.bitwise_and(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.KNIGHT])
+        white_bishop = np.bitwise_and(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.BISHOP])
+        white_rook = np.bitwise_and(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.ROOK])
+        white_queen = np.bitwise_and(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.QUEEN])
+        white_king = np.bitwise_and(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.KING])
 
-        black_pawn = self.get_piece_set(Piece.BLACK, Piece.PAWN)
-        black_knight = self.get_piece_set(Piece.BLACK, Piece.KNIGHT)
-        black_bishop = self.get_piece_set(Piece.BLACK, Piece.BISHOP)
-        black_rook = self.get_piece_set(Piece.BLACK, Piece.ROOK)
-        black_queen = self.get_piece_set(Piece.BLACK, Piece.QUEEN)
-        black_king = self.get_piece_set(Piece.BLACK, Piece.KING)
+        black_pawn = np.bitwise_and(self.pieceBB[Piece.BLACK], self.pieceBB[Piece.PAWN])
+        black_knight = np.bitwise_and(self.pieceBB[Piece.BLACK], self.pieceBB[Piece.KNIGHT])
+        black_bishop = np.bitwise_and(self.pieceBB[Piece.BLACK], self.pieceBB[Piece.BISHOP])
+        black_rook = np.bitwise_and(self.pieceBB[Piece.BLACK], self.pieceBB[Piece.ROOK])
+        black_queen = np.bitwise_and(self.pieceBB[Piece.BLACK], self.pieceBB[Piece.QUEEN])
+        black_king = np.bitwise_and(self.pieceBB[Piece.BLACK], self.pieceBB[Piece.KING])
 
         self.white_pieces = np.bitwise_or.reduce([white_pawn, white_knight, white_bishop, white_rook, white_queen, white_king])
         self.black_pieces = np.bitwise_or.reduce([black_pawn, black_knight, black_bishop, black_rook, black_queen, black_king])
@@ -210,16 +238,58 @@ class Engine():
             self.pieceBB[move.cpiece_color] = np.bitwise_xor(toBB, self.pieceBB[move.cpiece_color])
             self.pieceBB[move.cpiece_type] = np.bitwise_xor(toBB, self.pieceBB[move.cpiece_type])
 
-        # self.draw_bin(self.pieceBB[move.piece_color])
-        # self.draw_bin(self.pieceBB[move.piece_type])
         self.pieceBB[move.piece_color] = np.bitwise_xor(fromToBB, self.pieceBB[move.piece_color])
         self.pieceBB[move.piece_type] = np.bitwise_xor(fromToBB, self.pieceBB[move.piece_type])
+
+        self.move_history.append(move)
 
         #Switch player turn
         if self.player_turn == Piece.WHITE:
             self.player_turn = Piece.BLACK
         else:
             self.player_turn = Piece.WHITE
+
+    #Generate a unique blocker board, given an index (0..2^bits) and the blocker mask 
+    #for the piece/square. Each index will give a unique blocker board. 
+    def gen_blockerboard(self, index, blockermask):
+        blockerboard = blockermask
+        bitindex = 0
+
+        for i in range(64):
+            if np.bitwise_and(blockermask, np.uint64(1 << i)) != 0:
+                if (np.bitwise_and(index, (1 << bitindex))) == 0:
+                    blockerboard = np.bitwise_and(blockerboard, np.bitwise_not(np.uint64(1 << i)))
+                bitindex = bitindex + 1
+
+        return blockerboard
+
+    #Get attacks to a square of a color
+    def attacks_to_square(self, square, color):
+        opp_color = None
+        if color == Piece.WHITE:
+            opp_color = Piece.BLACK
+        else:
+            opp_color = Piece.WHITE
+
+        occupiedBB = np.bitwise_or(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.BLACK])
+
+        pawns = np.bitwise_and(self.pieceBB[opp_color], self.pieceBB[Piece.PAWN])
+        knight = np.bitwise_and(self.pieceBB[opp_color], self.pieceBB[Piece.KNIGHT])
+        bishop = np.bitwise_and(self.pieceBB[opp_color], self.pieceBB[Piece.BISHOP])
+        rook = np.bitwise_and(self.pieceBB[opp_color], self.pieceBB[Piece.ROOK])
+        queen = np.bitwise_or(self.pieceBB[opp_color], self.pieceBB[Piece.QUEEN])
+
+        pawn_attack = np.bitwise_and(self.pawn_attacks[color][square], pawns)
+        knight_attack = np.bitwise_and(self.knight_moves[square], knight)
+        bishop_attack = np.bitwise_and(self.bishop_moveboard[square][occupiedBB], bishop)
+        rook_attack = np.bitwise_and(self.rook_moveboard[square][occupiedBB], rook)
+        queen_attack = np.bitwise_or(self.bishop_moveboard[square][occupiedBB], self.rook_moveboard[square][occupiedBB])
+        queen_attack = np.bitwise_and(queen_attack, queen)
+
+        pawn_knight = np.bitwise_or(pawn_attack, knight_attack) 
+        bishop_rook = np.bitwise_or(bishop_attack, rook_attack)
+
+        return np.bitwise_or(np.bitwise_or(pawn_knight, bishop_rook), queen_attack)
 
     ## Check ranks and files ##
     def is_afile(self, square):
@@ -260,13 +330,11 @@ class Engine():
             elif self.all_pieces[player_color][i] == Piece.KNIGHT:
                 square_moves = self.get_knight_legal(player_color, i)
             elif self.all_pieces[player_color][i] == Piece.BISHOP:
-                avoid_directions = [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]
-                square_moves = self.get_sliding_legal(player_color, i, Piece.BISHOP, avoid_directions)
+                square_moves = self.get_sliding_legal(player_color, i, Piece.BISHOP)
             elif self.all_pieces[player_color][i] == Piece.ROOK:
-                avoid_directions = [Direction.NORTH_EAST, Direction.NORTH_WEST, Direction.SOUTH_EAST, Direction.SOUTH_WEST]
-                square_moves = self.get_sliding_legal(player_color, i, Piece.ROOK, avoid_directions)
+                square_moves = self.get_sliding_legal(player_color, i, Piece.ROOK)
             elif self.all_pieces[player_color][i] == Piece.QUEEN:
-                square_moves = self.get_sliding_legal(player_color, i, Piece.QUEEN, [])
+                square_moves = self.get_sliding_legal(player_color, i, Piece.QUEEN)
             elif self.all_pieces[player_color][i] == Piece.KING:
                 square_moves = self.get_king_legal(player_color, i)
 
@@ -418,63 +486,58 @@ class Engine():
         
         return moves
 
-    ## Get sliding pieces legal moves from a square ##
-    def get_sliding_legal(self, color, square_from, piece_type, avoid_directions = None):
+    # Get bishop legal moves from a square
+    def get_sliding_legal(self, color, square_from, piece_type):
         moves = []
         opp_pieces = None
         opp_color = None
-        positive = True
 
         if color == Piece.WHITE:
             opp_pieces = self.black_pieces
+            own_pieces = self.white_pieces
             opp_color = Piece.BLACK
         else:
             opp_pieces = self.white_pieces
+            own_pieces = self.black_pieces
             opp_color = Piece.WHITE
-        
-        ## Skip lines ##
-        for direction in Direction:
-            if direction in avoid_directions:
-                continue
-            elif direction > Direction.NORTH_WEST:
-                positive = False
-            else: 
-                positive = True
-            
-            ## Calculate including blocker ##
-            attacks = self.ray_moves[square_from][direction]
-            occupy_squares = np.bitwise_or(self.white_pieces, self.black_pieces)
-            blockers = np.bitwise_and(attacks, occupy_squares)
-            first_blocker = None
-            blocker_mask = np.uint64(0)
-            if blockers > 0:   
-                if positive:
-                    first_blocker = self.get_lsb(blockers)
-                else: 
-                    first_blocker = self.get_msb(blockers)
-                blocker_mask = np.uint64(1) << np.uint64(first_blocker)
-            
-            if first_blocker != None:
-                attacks = np.bitwise_xor(self.ray_moves[first_blocker][direction], attacks)
 
-            ## Check for capture moves ##
-            capture_moves = np.bitwise_and(attacks, opp_pieces)
-            while capture_moves > 0:
-                square_to = self.get_lsb(capture_moves)
-                captured_piece = self.all_pieces[opp_color][square_to]
-                move = Move(color, piece_type, square_from, square_to, opp_color, captured_piece)
-                moves.append(move)
-                square_to = np.uint64(1) << np.uint64(square_to)
-                capture_moves = np.bitwise_xor(capture_moves, square_to)
+        all_set = np.bitwise_or(opp_pieces, own_pieces)
+        moveboard = None
 
-            ## Remove blocker and check for push moves ##
-            push_moves = np.bitwise_xor(attacks, blocker_mask) 
-            while push_moves > 0:
-                square_to = self.get_lsb(push_moves)
-                move = Move(color, piece_type, square_from, square_to)
-                moves.append(move)
-                square_to = np.uint64(1) << np.uint64(square_to)
-                push_moves = np.bitwise_xor(push_moves, square_to)
+        if piece_type == Piece.BISHOP:
+            blockerboard = np.bitwise_and(all_set, self.bishop_masks[square_from])
+            moveboard = self.bishop_moveboard[square_from][blockerboard]
+        elif piece_type == Piece.ROOK:
+            blockerboard = np.bitwise_and(all_set, self.rook_masks[square_from])
+            moveboard = self.rook_moveboard[square_from][blockerboard]
+        else:
+            blockerboard_bishop = np.bitwise_and(all_set, self.bishop_masks[square_from])
+            moveboard_bishop = self.bishop_moveboard[square_from][blockerboard_bishop]
+            blockerboard_rook = np.bitwise_and(all_set, self.rook_masks[square_from])
+            moveboard_rook = self.rook_moveboard[square_from][blockerboard_rook]
+            moveboard = np.bitwise_or(moveboard_bishop, moveboard_rook)
+
+        moveboard = np.bitwise_and(moveboard, np.bitwise_not(own_pieces))
+
+        # Check for capture moves ##
+        ignore_captures = np.bitwise_and(moveboard, opp_pieces)
+        capture_moves = ignore_captures
+        while capture_moves > 0:
+            square_to = self.get_lsb(capture_moves)
+            captured_piece = self.all_pieces[opp_color][square_to]
+            move = Move(color, piece_type, square_from, square_to, opp_color, captured_piece)
+            moves.append(move)
+            square_to = np.uint64(1) << np.uint64(square_to)
+            capture_moves = np.bitwise_xor(capture_moves, square_to)
+
+        # Remove blocker and check for push moves ##
+        push_moves = np.bitwise_xor(moveboard, ignore_captures) 
+        while push_moves > 0:
+            square_to = self.get_lsb(push_moves)
+            move = Move(color, piece_type, square_from, square_to)
+            moves.append(move)
+            square_to = np.uint64(1) << np.uint64(square_to)
+            push_moves = np.bitwise_xor(push_moves, square_to)
 
         return moves
 
@@ -564,15 +627,18 @@ class Engine():
 
         ## Calculate lines ##
 
-        moves[Direction.NORTH] = np.uint64(72340172838076672) << np.uint64(square)
+        north = np.uint64(72340172838076672) << np.uint64(square)
+        moves[Direction.NORTH] = north
 
         south = np.uint64(282578800148737) >> np.uint64((7 - piece_rank)*8)
         south = south << np.uint64(piece_file)
         moves[Direction.SOUTH] = south
 
-        moves[Direction.EAST] = np.uint64(2**(7 - piece_file) - 1) << np.uint64(square + 1)
+        east = np.uint64(2**(7 - piece_file) - 1) << np.uint64(square + 1)
+        moves[Direction.EAST] = east
         
-        moves[Direction.WEST] = np.uint64(2**(piece_file) - 1) << np.uint64(square - piece_file)
+        west = np.uint64(2**(piece_file) - 1) << np.uint64(square - piece_file)
+        moves[Direction.WEST] = west
 
         ## Calculate diagonals ##
 
@@ -598,9 +664,122 @@ class Engine():
         wrap_size = piece_rank - piece_file - 1
         for i in range(wrap_size):
             south_west = np.bitwise_xor(south_west, (np.uint64(1) << np.uint64(self.get_lsb(south_west))))
-        moves[Direction.SOUTH_WEST] = south_west  
+        moves[Direction.SOUTH_WEST] = south_west
 
         return moves
+
+    # Fill bishop moves
+    def get_bishop_mask(self, square):
+        mask = None
+
+        north_west = np.bitwise_and(np.uint64(18374403900871474688), self.ray_moves[square][Direction.NORTH_WEST])
+        south_west = np.bitwise_and(np.uint64(71775015237779198), self.ray_moves[square][Direction.SOUTH_WEST])
+        north_east = np.bitwise_and(np.uint64(9187201950435737344), self.ray_moves[square][Direction.NORTH_EAST])
+        south_east = np.bitwise_and(np.uint64(35887507618889599), self.ray_moves[square][Direction.SOUTH_EAST])
+
+        west = np.bitwise_or(north_west, south_west)  
+        east = np.bitwise_or(north_east, south_east)
+        mask = np.bitwise_or(west, east)
+
+        return mask
+
+    # Get move board from a blocker board for bishop
+    def get_bishop_moveboard(self, square, blocker_board):
+        west = np.bitwise_or(self.ray_moves[square][Direction.NORTH_WEST], self.ray_moves[square][Direction.SOUTH_WEST])
+        east = np.bitwise_or(self.ray_moves[square][Direction.NORTH_EAST], self.ray_moves[square][Direction.SOUTH_EAST])
+        moveboard = np.bitwise_or(west, east)
+
+        nwest_blocker = np.bitwise_and(self.ray_moves[square][Direction.NORTH_WEST], blocker_board)
+        if nwest_blocker != 0:
+            first_blocker = self.get_lsb(nwest_blocker)
+            moveboard = np.bitwise_xor(self.ray_moves[first_blocker][Direction.NORTH_WEST], moveboard)
+        
+        neast_blocker = np.bitwise_and(self.ray_moves[square][Direction.NORTH_EAST], blocker_board)
+        if neast_blocker != 0:
+            first_blocker = self.get_lsb(neast_blocker)
+            moveboard = np.bitwise_xor(self.ray_moves[first_blocker][Direction.NORTH_EAST], moveboard)
+        
+        swest_blocker = np.bitwise_and(self.ray_moves[square][Direction.SOUTH_WEST], blocker_board)
+        if swest_blocker != 0:
+            first_blocker = self.get_msb(swest_blocker)
+            moveboard = np.bitwise_xor(self.ray_moves[first_blocker][Direction.SOUTH_WEST], moveboard)
+        
+        seast_blocker = np.bitwise_and(self.ray_moves[square][Direction.SOUTH_EAST], blocker_board)
+        if seast_blocker != 0:
+            first_blocker = self.get_msb(seast_blocker)
+            moveboard = np.bitwise_xor(self.ray_moves[first_blocker][Direction.SOUTH_EAST], moveboard)
+
+        return moveboard
+
+    # Get dictionary of keys: blockerboard values: moveboard , from a square
+    def get_bishop_attacks(self, square):
+        blockermask = self.bishop_masks[square]
+        bits = bin(blockermask).count("1")
+
+        blockerboard_to_moveboard = {}
+
+        for j in range((1<<bits)):
+            blockerboard = self.gen_blockerboard(j, blockermask)
+            blockerboard_to_moveboard[blockerboard] = self.get_bishop_moveboard(square, blockerboard)
+
+        return blockerboard_to_moveboard
+
+    # Fill rook moves 
+    def get_rook_mask(self, square):
+        mask = None 
+
+        west = np.bitwise_and(np.uint64(18374403900871474942), self.ray_moves[square][Direction.WEST])
+        east = np.bitwise_and(np.uint64(9187201950435737471), self.ray_moves[square][Direction.EAST])
+        north = np.bitwise_and(np.uint64(72057594037927935), self.ray_moves[square][Direction.NORTH])
+        south = np.bitwise_and(np.uint64(18446744073709551360), self.ray_moves[square][Direction.SOUTH])
+        
+        west_east = np.bitwise_or(west, east)
+        north_south = np.bitwise_or(north, south)
+        mask = np.bitwise_or(west_east, north_south)
+
+        return mask
+
+    # Get move board from a blocker board for rook
+    def get_rook_moveboard(self, square, blocker_board):
+        north_south = np.bitwise_or(self.ray_moves[square][Direction.NORTH], self.ray_moves[square][Direction.SOUTH])
+        west_east = np.bitwise_or(self.ray_moves[square][Direction.WEST], self.ray_moves[square][Direction.EAST])
+        moveboard = np.bitwise_or(north_south, west_east)
+
+        north_blocker = np.bitwise_and(self.ray_moves[square][Direction.NORTH], blocker_board)
+        if north_blocker != 0:
+            first_blocker = self.get_lsb(north_blocker)
+            moveboard = np.bitwise_xor(self.ray_moves[first_blocker][Direction.NORTH], moveboard)
+        
+        south_blocker = np.bitwise_and(self.ray_moves[square][Direction.SOUTH], blocker_board)
+        if south_blocker != 0:
+            first_blocker = self.get_msb(south_blocker)
+            moveboard = np.bitwise_xor(self.ray_moves[first_blocker][Direction.SOUTH], moveboard)
+        
+        east_blocker = np.bitwise_and(self.ray_moves[square][Direction.EAST], blocker_board)
+        if east_blocker != 0:
+            first_blocker = self.get_lsb(east_blocker)
+            moveboard = np.bitwise_xor(self.ray_moves[first_blocker][Direction.EAST], moveboard)
+        
+        west_blocker = np.bitwise_and(self.ray_moves[square][Direction.WEST], blocker_board)
+        if west_blocker != 0:
+            first_blocker = self.get_msb(west_blocker)
+            moveboard = np.bitwise_xor(self.ray_moves[first_blocker][Direction.WEST], moveboard)
+
+        return moveboard
+
+    # Get dictionary of keys: blockerboard values: moveboard , from a square
+    def get_rook_attacks(self, square):
+        blockermask = self.rook_masks[square]
+        bits = bin(blockermask).count("1")
+
+        blockerboard_to_moveboard = {}
+
+        for j in range((1<<bits)):
+            blockerboard = self.gen_blockerboard(j, blockermask)
+            blockerboard_to_moveboard[blockerboard] = self.get_rook_moveboard(square, blockerboard)
+
+        return blockerboard_to_moveboard
+
 
     ## Fill king moves ##
     def get_king_moves(self, square):
@@ -630,6 +809,4 @@ class Engine():
                 print(number[(i*8 + 7-j)], end="")
             print("")
         print("")
-    
-    
 

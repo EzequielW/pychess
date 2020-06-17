@@ -7,8 +7,6 @@ from engine import Engine, Piece, Square
 SIZE = MAX_WIDTH, MAX_HEIGHT = 576, 576 
 FPS = 200
 
-## White pieces ##
-
 if __name__ == "__main__":
     chess_game = Engine()
     
@@ -113,11 +111,14 @@ if __name__ == "__main__":
 
         if piece_moves != None:
             for move in piece_moves:
+                radius = 4
+                if move.castle == True:
+                    radius = 3
                 pos_x = (MAX_WIDTH//8) * ((move.square_to % 8))
                 pos_y = (MAX_HEIGHT//8) * math.floor((63 - move.square_to)/8)
                 pos_x = (pos_x + MAX_HEIGHT//16)
                 pos_y = (pos_y + MAX_HEIGHT//16)
-                pygame.draw.circle(win, (0,255,120), (pos_x, pos_y), (MAX_HEIGHT//8 - scale_offset*4)//2)
+                pygame.draw.circle(win, (0,255,120), (pos_x, pos_y), (MAX_HEIGHT//8 - scale_offset*radius)//2)
 
         pygame.display.update()
 
