@@ -109,11 +109,6 @@ class Engine():
 
             with open('piece_movement.json', 'wb') as outfile:
                 pickle.dump(piece_movement, outfile)
-        
-        ## Variables to avoid generating sets again ##
-        self.white_pieces = None
-        self.black_pieces = None
-        self.all_pieces = None
 
     ## Get all pieces sets ##
     def get_all_pieces(self):
@@ -133,9 +128,6 @@ class Engine():
         black_queen = np.bitwise_and(self.pieceBB[Piece.BLACK], self.pieceBB[Piece.QUEEN])
         black_king = np.bitwise_and(self.pieceBB[Piece.BLACK], self.pieceBB[Piece.KING])
 
-        self.white_pieces = np.bitwise_or.reduce([white_pawn, white_knight, white_bishop, white_rook, white_queen, white_king])
-        self.black_pieces = np.bitwise_or.reduce([black_pawn, black_knight, black_bishop, black_rook, black_queen, black_king])
-            
         for j in range(64):
             if (white_pawn >> np.uint64(j)) % 2 == 1:
                 pieces[Piece.WHITE][j] = Piece.PAWN 
@@ -320,7 +312,7 @@ class Engine():
     def get_legal_moves(self, player_color):
         moves = [None] * 64
 
-        self.all_pieces = self.get_all_pieces()
+        all_pieces = self.get_all_pieces()
 
         for i in range(len(moves)):
             square_moves = None
@@ -341,179 +333,154 @@ class Engine():
             moves[i] = square_moves
         return moves
 
-    ## Get king legal moves ##
-    def get_king_legal(self, color, square_from):
+    # Get a list of moves from a 64 bit moveboard
+    def get_moves_from_moveboard(self, moveboard, square_from, piece_color, piece_type, capture=False):
+        moves = []
+
+        if capture:
+            opp_color = None
+            opp_color = Piece.BLACK if piece_color == Piece.WHITE else opp_color == Piece.WHITE
+            while moveboard > 0:
+                square_to = self.get_lsb(moveboard)
+                captured_piece = self.all_pieces[opp_color][square_to]
+                move = Move(piece_color, piece_type, square_from, square_to, opp_color, captured_piece)
+                moves.append(move)
+                square_to = np.uint64(1) << np.uint64(square_to)
+                moveboard = np.bitwise_xor(moveboard, square_to)
+        else:
+            while moveboard > 0:
+                square_to = self.get_lsb(moveboard)
+                move = Move(piece_color, piece_type, square_from, square_to)
+                moves.append(move)
+                square_to = np.uint64(1) << np.uint64(square_to)
+                moveboard = np.bitwise_xor(moveboard, square_to)
+
+        return moves
+
+    # Get king legal moves
+    def get_king_legal(self, piece_color, square_from):
         moves = []
         opp_pieces = None
-        opp_color = None
+        occupied_squares = np.bitwise_or(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.BLACK])
 
         #Set opposite color and check if it can castle either side
-        if color == Piece.WHITE:
-            opp_pieces = self.black_pieces
-            opp_color = Piece.BLACK
+        if piece_color == Piece.WHITE:
+            opp_pieces = self.pieceBB[Piece.BLACK]
             if self.castleA1:
                 castle_path = self.ray_moves[square_from][Direction.WEST]
-                all_set = np.bitwise_or(self.white_pieces, self.black_pieces)
-                castle_path = np.bitwise_and(castle_path, all_set)
+                castle_path = np.bitwise_and(castle_path, occupied_squares)
                 if castle_path == np.uint64(1):
-                    move = Move(color, Piece.KING, square_from, Square.C1, castle = True)
+                    move = Move(piece_color, Piece.KING, square_from, Square.C1, castle = True)
                     moves.append(move)
             if self.castleH1:
                 castle_path = self.ray_moves[square_from][Direction.EAST]
-                all_set = np.bitwise_or(self.white_pieces, self.black_pieces)
-                castle_path = np.bitwise_and(castle_path, all_set)
+                castle_path = np.bitwise_and(castle_path, occupied_squares)
                 if castle_path == np.uint64(128):
-                    move = Move(color, Piece.KING, square_from, Square.G1, castle = True)
+                    move = Move(piece_color, Piece.KING, square_from, Square.G1, castle = True)
                     moves.append(move)
         else:
-            opp_pieces = self.white_pieces
-            opp_color = Piece.WHITE
+            opp_pieces = self.pieceBB[Piece.WHITE]
             if self.castleA8:
                 castle_path = self.ray_moves[square_from][Direction.WEST]
-                all_set = np.bitwise_or(self.white_pieces, self.black_pieces)
-                castle_path = np.bitwise_and(castle_path, all_set)
+                castle_path = np.bitwise_and(castle_path, occupied_squares)
                 if castle_path == np.uint64(72057594037927936):
-                    move = Move(color, Piece.KING, square_from, Square.C8, castle = True)
+                    move = Move(piece_color, Piece.KING, square_from, Square.C8, castle = True)
                     moves.append(move)
             if self.castleH8:
                 castle_path = self.ray_moves[square_from][Direction.EAST]
-                all_set = np.bitwise_or(self.white_pieces, self.black_pieces)
-                castle_path = np.bitwise_and(castle_path, all_set)
+                castle_path = np.bitwise_and(castle_path, occupied_squares)
                 if castle_path == np.uint64(9223372036854775808):
-                    move = Move(color, Piece.KING, square_from, Square.G8, castle = True)
+                    move = Move(piece_color, Piece.KING, square_from, Square.G8, castle = True)
                     moves.append(move)
 
         #Check for capture moves
         capture_moves = np.bitwise_and(self.king_moves[square_from], opp_pieces)
-        while capture_moves > 0:
-            square_to = self.get_lsb(capture_moves)
-            captured_piece = self.all_pieces[opp_color][square_to]
-            move = Move(color, Piece.KING, square_from, square_to, opp_color, captured_piece)
-            moves.append(move)
-            square_to = np.uint64(1) << np.uint64(square_to)
-            capture_moves = np.bitwise_xor(capture_moves, square_to)
+        moves.extend(self.get_moves_from_moveboard(capture_moves, square_from, piece_color, Piece.KING, True))
 
         #Check for push moves
-        all_set = np.bitwise_or(self.white_pieces, self.black_pieces)
         push_moves = np.bitwise_and(self.king_moves[square_from], np.bitwise_not(all_set))
-        while push_moves > 0:
-            square_to = self.get_lsb(push_moves)
-            move = Move(color, Piece.KING, square_from, square_to)
-            moves.append(move)
-            square_to = np.uint64(1) << np.uint64(square_to)
-            push_moves = np.bitwise_xor(push_moves, square_to)
+        moves.extend(self.get_moves_from_moveboard(push_moves, square_from, piece_color, Piece.KING))
 
         return moves
 
-    ## Get pawn legal moves ##
-    def get_pawn_legal(self, color, square_from):
+    # Get pawn legal moves
+    def get_pawn_legal(self, piece_color, square_from):
         moves = []
         opp_pieces = None
-        opp_color = None
 
-        if color == Piece.WHITE:
-            opp_pieces = self.black_pieces
-            opp_color = Piece.BLACK
+        if piece_color == Piece.WHITE:
+            opp_pieces = self.pieceBB[Piece.BLACK]
         else:
-            opp_pieces = self.white_pieces
-            opp_color = Piece.WHITE
+            opp_pieces = self.pieceBB[Piece.WHITE]
 
-        ## Check for capture moves ##
-        capture_moves = np.bitwise_and(self.pawn_attacks[square_from][color], opp_pieces)
-        while capture_moves > 0:
-            square_to = self.get_lsb(capture_moves)
-            captured_piece = self.all_pieces[opp_color][square_to]
-            move = Move(color, Piece.PAWN, square_from, square_to, opp_color, captured_piece)
-            moves.append(move)
-            square_to = np.uint64(1) << np.uint64(square_to)
-            capture_moves = np.bitwise_xor(capture_moves, square_to)
+        # Check for capture moves
+        capture_moves = np.bitwise_and(self.pawn_attacks[square_from][piece_color], opp_pieces)
+        moves.extend(self.get_moves_from_moveboard(capture_moves, square_from, piece_color, Piece.PAWN, True))
 
-        ## Check pawn blockers ##
-        all_set = np.bitwise_or(self.white_pieces, self.black_pieces)
-        blocker_mask = np.bitwise_and(self.pawn_pushes[square_from][color], all_set)
+        # Check pawn blockers
+        occupied_squares = np.bitwise_or(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.BLACK])
+        blocker_mask = np.bitwise_and(self.pawn_pushes[square_from][piece_color], occupied_squares)
         blocker_square = None
         if blocker_mask > 0:
-            if color == Piece.WHITE:
+            if piece_color == Piece.WHITE:
                 blocker_square = self.get_msb(blocker_mask)
             else:
                 blocker_square = self.get_lsb(blocker_mask)
-            blocker_mask = np.bitwise_or(self.pawn_pushes[blocker_square][color], blocker_mask)
+            blocker_mask = np.bitwise_or(self.pawn_pushes[blocker_square][piece_color], blocker_mask)
 
-        ## Check for push moves ##
-        push_moves = np.bitwise_and(blocker_mask, self.pawn_pushes[square_from][color])
-        push_moves = np.bitwise_xor(push_moves, self.pawn_pushes[square_from][color])
-        while push_moves > 0:
-            square_to = self.get_lsb(push_moves)
-            move = Move(color, Piece.PAWN, square_from, square_to)
-            moves.append(move)
-            square_to = np.uint64(1) << np.uint64(square_to)
-            push_moves = np.bitwise_xor(push_moves, square_to)
+        # Check for push moves
+        push_moves = np.bitwise_and(blocker_mask, self.pawn_pushes[square_from][piece_color])
+        push_moves = np.bitwise_xor(push_moves, self.pawn_pushes[square_from][piece_color])
+        moves.extend(self.get_moves_from_moveboard(push_moves, square_from, piece_color, Piece.PAWN))
 
         return moves
 
-    ## Get knight legal moves from a square ## 
-    def get_knight_legal(self, color, square_from):
+    # Get knight legal moves from a square
+    def get_knight_legal(self, piece_color, square_from):
         moves = []
         opp_pieces = None
-        opp_color = None
 
-        if color == Piece.WHITE:
-            opp_pieces = self.black_pieces
-            opp_color = Piece.BLACK
+        if piece_color == Piece.WHITE:
+            opp_pieces = self.pieceBB[Piece.BLACK]
         else:
-            opp_pieces = self.white_pieces
-            opp_color = Piece.WHITE
+            opp_pieces = self.pieceBB[Piece.WHITE]
 
         ## Check for capture moves ##
         capture_moves = np.bitwise_and(self.knight_moves[square_from], opp_pieces)
-        while capture_moves > 0:
-            square_to = self.get_lsb(capture_moves)
-            captured_piece = self.all_pieces[opp_color][square_to]
-            move = Move(color, Piece.KNIGHT, square_from, square_to, opp_color, captured_piece)
-            moves.append(move)
-            square_to = np.uint64(1) << np.uint64(square_to)
-            capture_moves = np.bitwise_xor(capture_moves, square_to)
+        moves.extend(self.get_moves_from_moveboard(capture_moves, square_from, piece_color, Piece.KNIGHT, True))
 
         ## Check for push moves ##
-        occupy_squares = np.bitwise_not(np.bitwise_or(self.white_pieces, self.black_pieces))
-        push_moves = np.bitwise_and(occupy_squares, self.knight_moves[square_from]) 
-        while push_moves > 0:
-            square_to = self.get_lsb(push_moves)
-            move = Move(color, Piece.KNIGHT, square_from, square_to)
-            moves.append(move)
-            square_to = np.uint64(1) << np.uint64(square_to)
-            push_moves = np.bitwise_xor(push_moves, square_to)
+        occupied_squares = np.bitwise_not(np.bitwise_or(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.BLACK]))
+        push_moves = np.bitwise_and(occupied_squares, self.knight_moves[square_from]) 
+        moves.extend(self.get_moves_from_moveboard(push_moves, square_from, piece_color, Piece.KNIGHT))
         
         return moves
 
     # Get bishop legal moves from a square
-    def get_sliding_legal(self, color, square_from, piece_type):
+    def get_sliding_legal(self, piece_color, square_from, piece_type):
         moves = []
         opp_pieces = None
-        opp_color = None
 
-        if color == Piece.WHITE:
-            opp_pieces = self.black_pieces
-            own_pieces = self.white_pieces
-            opp_color = Piece.BLACK
+        if piece_color == Piece.WHITE:
+            opp_pieces = self.pieceBB[Piece.BLACK]
+            own_pieces = self.pieceBB[Piece.WHITE]
         else:
-            opp_pieces = self.white_pieces
-            own_pieces = self.black_pieces
-            opp_color = Piece.WHITE
+            opp_pieces = self.pieceBB[Piece.WHITE]
+            own_pieces = self.pieceBB[Piece.BLACK]
 
-        all_set = np.bitwise_or(opp_pieces, own_pieces)
+        occupied_squares = np.bitwise_or(opp_pieces, own_pieces)
         moveboard = None
 
         if piece_type == Piece.BISHOP:
-            blockerboard = np.bitwise_and(all_set, self.bishop_masks[square_from])
+            blockerboard = np.bitwise_and(occupied_squares, self.bishop_masks[square_from])
             moveboard = self.bishop_moveboard[square_from][blockerboard]
         elif piece_type == Piece.ROOK:
-            blockerboard = np.bitwise_and(all_set, self.rook_masks[square_from])
+            blockerboard = np.bitwise_and(occupied_squares, self.rook_masks[square_from])
             moveboard = self.rook_moveboard[square_from][blockerboard]
         else:
-            blockerboard_bishop = np.bitwise_and(all_set, self.bishop_masks[square_from])
+            blockerboard_bishop = np.bitwise_and(occupied_squares, self.bishop_masks[square_from])
             moveboard_bishop = self.bishop_moveboard[square_from][blockerboard_bishop]
-            blockerboard_rook = np.bitwise_and(all_set, self.rook_masks[square_from])
+            blockerboard_rook = np.bitwise_and(occupied_squares, self.rook_masks[square_from])
             moveboard_rook = self.rook_moveboard[square_from][blockerboard_rook]
             moveboard = np.bitwise_or(moveboard_bishop, moveboard_rook)
 
@@ -522,22 +489,11 @@ class Engine():
         # Check for capture moves ##
         ignore_captures = np.bitwise_and(moveboard, opp_pieces)
         capture_moves = ignore_captures
-        while capture_moves > 0:
-            square_to = self.get_lsb(capture_moves)
-            captured_piece = self.all_pieces[opp_color][square_to]
-            move = Move(color, piece_type, square_from, square_to, opp_color, captured_piece)
-            moves.append(move)
-            square_to = np.uint64(1) << np.uint64(square_to)
-            capture_moves = np.bitwise_xor(capture_moves, square_to)
+        moves.extend(self.get_moves_from_moveboard(capture_moves, square_from, piece_color, piece_type, True))
 
         # Remove blocker and check for push moves ##
         push_moves = np.bitwise_xor(moveboard, ignore_captures) 
-        while push_moves > 0:
-            square_to = self.get_lsb(push_moves)
-            move = Move(color, piece_type, square_from, square_to)
-            moves.append(move)
-            square_to = np.uint64(1) << np.uint64(square_to)
-            push_moves = np.bitwise_xor(push_moves, square_to)
+        moves.extend(self.get_moves_from_moveboard(push_moves, square_from, piece_color, piece_type))
 
         return moves
 
