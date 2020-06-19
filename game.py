@@ -47,7 +47,7 @@ if __name__ == "__main__":
                          [b_pawn_image, b_knight_image, b_bishop_image, b_rook_image, b_queen_image, b_king_image]]
 
     moves = chess_game.get_legal_moves(chess_game.player_turn)
-    board = chess_game.get_all_pieces() 
+    board = chess_game.current_board
     piece_moves = None
     piece_square = None
 
@@ -68,7 +68,8 @@ if __name__ == "__main__":
                         if move.square_to == square:
                             chess_game.move(move)
                             moves = chess_game.get_legal_moves(chess_game.player_turn)
-                            board = chess_game.get_all_pieces() 
+                            board = chess_game.current_board
+                            print(chess_game.game_over)
                     piece_moves = None
                     piece_square = None
                 else:

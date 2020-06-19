@@ -52,6 +52,7 @@ class Move():
 class Engine():
     def __init__(self):
         self.player_turn = Piece.WHITE
+        self.game_over = False
         self.castleA1 = True
         self.castleH1 = True
         self.castleA8 = True
@@ -66,17 +67,9 @@ class Engine():
         self.bishop_moveboard = [None]*64
         self.rook_moveboard = [None]*64
         self.move_history = []
+
         ## Initial Bitboard for piece and color ##
         ## Order by white, black, pawn, knight, bishop, rook, queen and king ##
-
-        # Load rook and bishop blockerboard to moveboard dictionaries
-        if os.path.isfile("piece_movement.json"):
-            print("---- loading piece movement ----")
-            with (open('piece_movement.json', 'rb')) as openfile:
-                piece_moveboard = pickle.load(openfile)
-                self.rook_moveboard = piece_moveboard['rook_moveboard']
-                self.bishop_moveboard = piece_moveboard['bishop_moveboard']
-
         self.pieceBB = np.array((65535,
                                 18446462598732840960,
                                 71776119061282560,
@@ -85,6 +78,15 @@ class Engine():
                                 9295429630892703873,
                                 576460752303423496,
                                 1152921504606846992), dtype=np.uint64)
+
+        # Load previously created rook and bishop blockerboard to moveboard dictionaries
+        if os.path.isfile("piece_movement.json"):
+            print("---- loading piece movement ----")
+            with (open('piece_movement.json', 'rb')) as openfile:
+                piece_moveboard = pickle.load(openfile)
+                self.rook_moveboard = piece_moveboard['rook_moveboard']
+                self.bishop_moveboard = piece_moveboard['bishop_moveboard']
+
         ## Initialize moves for each piece ##
         for i in range(64):
             self.knight_moves[i] = self.get_knight_moves(i)
@@ -95,6 +97,7 @@ class Engine():
             self.pawn_attacks[i] = self.get_pawn_attacks(i)
             self.pawn_pushes[i] = self.get_pawn_pushes(i)
 
+        # Create dictionaries if file doesnt exist
         if not os.path.isfile("piece_movement.json"):
             print("---- dumping piece movement ----")
 
@@ -110,8 +113,11 @@ class Engine():
             with open('piece_movement.json', 'wb') as outfile:
                 pickle.dump(piece_movement, outfile)
 
+        self.current_board = None
+        self.update_current_board()
+
     ## Get all pieces sets ##
-    def get_all_pieces(self):
+    def update_current_board(self):
         pieces = [[None]*64 for n in range(2)]
 
         white_pawn = np.bitwise_and(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.PAWN])
@@ -154,7 +160,7 @@ class Engine():
             elif (black_king >> np.uint64(j)) % 2 == 1:
                 pieces[Piece.BLACK][j] = Piece.KING
                 
-        return pieces        
+        self.current_board = pieces        
  
     ## Get least significant bit ##
     def get_lsb(self, n):
@@ -241,6 +247,9 @@ class Engine():
         else:
             self.player_turn = Piece.WHITE
 
+        # Update current board using the bitboards
+        self.update_current_board()
+
     #Generate a unique blocker board, given an index (0..2^bits) and the blocker mask 
     #for the piece/square. Each index will give a unique blocker board. 
     def gen_blockerboard(self, index, blockermask):
@@ -255,27 +264,26 @@ class Engine():
 
         return blockerboard
 
-    #Get attacks to a square of a color
-    def attacks_to_square(self, square, color):
+    # Returns attacks to a square
+    def attacks_to_square(self, square, piece_color):
         opp_color = None
-        if color == Piece.WHITE:
-            opp_color = Piece.BLACK
-        else:
-            opp_color = Piece.WHITE
+        opp_color = Piece.BLACK if piece_color == Piece.WHITE else Piece.WHITE
 
         occupiedBB = np.bitwise_or(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.BLACK])
+        bishop_blockerboard = np.bitwise_and(self.bishop_masks[square], occupiedBB)
+        rook_blockerboard = np.bitwise_and(self.rook_masks[square], occupiedBB)
 
         pawns = np.bitwise_and(self.pieceBB[opp_color], self.pieceBB[Piece.PAWN])
         knight = np.bitwise_and(self.pieceBB[opp_color], self.pieceBB[Piece.KNIGHT])
         bishop = np.bitwise_and(self.pieceBB[opp_color], self.pieceBB[Piece.BISHOP])
         rook = np.bitwise_and(self.pieceBB[opp_color], self.pieceBB[Piece.ROOK])
-        queen = np.bitwise_or(self.pieceBB[opp_color], self.pieceBB[Piece.QUEEN])
+        queen = np.bitwise_and(self.pieceBB[opp_color], self.pieceBB[Piece.QUEEN])
 
-        pawn_attack = np.bitwise_and(self.pawn_attacks[color][square], pawns)
+        pawn_attack = np.bitwise_and(self.pawn_attacks[square][piece_color], pawns)
         knight_attack = np.bitwise_and(self.knight_moves[square], knight)
-        bishop_attack = np.bitwise_and(self.bishop_moveboard[square][occupiedBB], bishop)
-        rook_attack = np.bitwise_and(self.rook_moveboard[square][occupiedBB], rook)
-        queen_attack = np.bitwise_or(self.bishop_moveboard[square][occupiedBB], self.rook_moveboard[square][occupiedBB])
+        bishop_attack = np.bitwise_and(self.bishop_moveboard[square][bishop_blockerboard], bishop)
+        rook_attack = np.bitwise_and(self.rook_moveboard[square][rook_blockerboard], rook)
+        queen_attack = np.bitwise_or(self.bishop_moveboard[square][bishop_blockerboard], self.rook_moveboard[square][rook_blockerboard])
         queen_attack = np.bitwise_and(queen_attack, queen)
 
         pawn_knight = np.bitwise_or(pawn_attack, knight_attack) 
@@ -311,26 +319,106 @@ class Engine():
     ## Returns all the legal moves on the current board given the players_turn ##
     def get_legal_moves(self, player_color):
         moves = [None] * 64
+        opp_color = None
+        opp_color = Piece.BLACK if player_color == Piece.WHITE else Piece.WHITE
 
-        all_pieces = self.get_all_pieces()
+        king_square = np.bitwise_and(self.pieceBB[player_color], self.pieceBB[Piece.KING])
+        king_square = self.get_lsb(king_square)
 
+        attacks_to_king = self.attacks_to_square(king_square, player_color)
+        occupied_squares = np.bitwise_or(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.BLACK])
+
+        # Calculate opponent attackts so the king doesnt walk to check
+        opp_attacks = np.uint64(0)
         for i in range(len(moves)):
-            square_moves = None
+            if self.current_board[opp_color][i] == Piece.PAWN:
+                opp_attacks = np.bitwise_or(self.pawn_attacks[i][opp_color], opp_attacks)
+            elif self.current_board[opp_color][i] == Piece.KNIGHT:
+                opp_attacks = np.bitwise_or(self.knight_moves[i], opp_attacks)
+            elif self.current_board[opp_color][i] == Piece.BISHOP:
+                blockerboard = np.bitwise_and(self.bishop_masks[i], occupied_squares)
+                opp_attacks = np.bitwise_or(self.bishop_moveboard[i][blockerboard], opp_attacks)
+            elif self.current_board[opp_color][i] == Piece.ROOK:
+                blockerboard = np.bitwise_and(self.rook_masks[i], occupied_squares)
+                opp_attacks = np.bitwise_or(self.rook_moveboard[i][blockerboard], opp_attacks)
+            elif self.current_board[opp_color][i] == Piece.QUEEN:
+                bishop_blockerboard = np.bitwise_and(self.bishop_masks[i], occupied_squares)
+                rook_blockerboard = np.bitwise_and(self.rook_masks[i], occupied_squares)
+                moveboard = np.bitwise_or(self.bishop_moveboard[i][bishop_blockerboard], self.rook_moveboard[i][rook_blockerboard])
+                opp_attacks = np.bitwise_or(moveboard, opp_attacks)
+        
+        # There is no check
+        if bin(attacks_to_king).count("1") == 0:
+            for i in range(len(moves)):
+                if self.current_board[player_color][i] == Piece.PAWN:
+                    moves[i] = self.get_pawn_legal(player_color, i)
+                elif self.current_board[player_color][i] == Piece.KNIGHT:
+                    moves[i] = self.get_knight_legal(player_color, i)
+                elif self.current_board[player_color][i] == Piece.BISHOP:
+                    moves[i] = self.get_sliding_legal(player_color, i, Piece.BISHOP)
+                elif self.current_board[player_color][i] == Piece.ROOK:
+                    moves[i] = self.get_sliding_legal(player_color, i, Piece.ROOK)
+                elif self.current_board[player_color][i] == Piece.QUEEN:
+                    moves[i] = self.get_sliding_legal(player_color, i, Piece.QUEEN)
+                elif self.current_board[player_color][i] == Piece.KING:
+                    moves[i] = self.get_king_legal(player_color, i, opp_attacks)
+        # There is a single check            
+        elif bin(attacks_to_king).count("1") == 1:
+            # Get squares that can block the check
+            attacker_square = self.get_lsb(attacks_to_king)
+            blocking_moves = None
+            if self.current_board[opp_color][attacker_square] == Piece.PAWN:
+                blocking_moves = np.uint64(1 << attacker_square)
+            elif self.current_board[opp_color][attacker_square] == Piece.KNIGHT:
+                blocking_moves = np.uint64(1 << attacker_square)
+            elif self.current_board[opp_color][attacker_square] == Piece.BISHOP:
+                attacker_moves = np.bitwise_and(self.bishop_masks[attacker_square], occupied_squares)
+                blocking_moves = np.bitwise_and(self.bishop_moveboard[attacker_square][attacker_moves], self.bishop_moveboard[king_square][king_moves])
+                blocking_moves = np.bitwise_or(np.uint64(1 << attacker_square), blocking_moves)
+            elif self.current_board[opp_color][attacker_square] == Piece.ROOK:
+                attacker_moves = np.bitwise_and(self.rook_masks[attacker_square], occupied_squares)
+                king_moves = np.bitwise_and(self.rook_masks[king_square], occupied_squares)
+                blocking_moves = np.bitwise_and(self.rook_moveboard[attacker_square][attacker_moves], self.rook_moveboard[king_square][king_moves])
+                blocking_moves = np.bitwise_or(np.uint64(1 << attacker_square), blocking_moves)
+            elif self.current_board[opp_color][attacker_square] == Piece.QUEEN:
+                # Check if its line check or diagonal check
+                attacker_moves = None
+                king_moves = None
+                if abs(king_square - attacker_square) == 8 or (king_square//8) == (attacker_square//8):
+                    attacker_moves = np.bitwise_and(self.rook_masks[attacker_square], occupied_squares)
+                    attacker_moves = self.rook_moveboard[attacker_square][attacker_moves]
+                    king_moves = np.bitwise_and(self.rook_masks[king_square], occupied_squares)
+                    king_moves = self.rook_moveboard[king_square][king_moves]
+                else:
+                    attacker_moves = np.bitwise_and(self.bishop_masks[attacker_square], occupied_squares)
+                    attacker_moves = self.bishop_moveboard[attacker_square][attacker_moves]
+                    king_moves = np.bitwise_and(self.bishop_masks[king_square], occupied_squares)
+                    king_moves = self.bishop_moveboard[king_square][king_moves]
 
-            if self.all_pieces[player_color][i] == Piece.PAWN:
-                square_moves = self.get_pawn_legal(player_color, i)
-            elif self.all_pieces[player_color][i] == Piece.KNIGHT:
-                square_moves = self.get_knight_legal(player_color, i)
-            elif self.all_pieces[player_color][i] == Piece.BISHOP:
-                square_moves = self.get_sliding_legal(player_color, i, Piece.BISHOP)
-            elif self.all_pieces[player_color][i] == Piece.ROOK:
-                square_moves = self.get_sliding_legal(player_color, i, Piece.ROOK)
-            elif self.all_pieces[player_color][i] == Piece.QUEEN:
-                square_moves = self.get_sliding_legal(player_color, i, Piece.QUEEN)
-            elif self.all_pieces[player_color][i] == Piece.KING:
-                square_moves = self.get_king_legal(player_color, i)
+                blocking_moves = np.bitwise_and(attacker_moves, king_moves)
+                blocking_moves = np.bitwise_or(np.uint64(1 << attacker_square), blocking_moves)
 
-            moves[i] = square_moves
+            # Add moves that block the check or king moves
+            for i in range(len(moves)):
+                if self.current_board[player_color][i] == Piece.PAWN:
+                    moves[i] = self.get_pawn_legal(player_color, i, blocking_moves)
+                elif self.current_board[player_color][i] == Piece.KNIGHT:
+                    moves[i] = self.get_knight_legal(player_color, i, blocking_moves)
+                elif self.current_board[player_color][i] == Piece.BISHOP:
+                    moves[i] = self.get_sliding_legal(player_color, i, Piece.BISHOP, blocking_moves)
+                elif self.current_board[player_color][i] == Piece.ROOK:
+                    moves[i] = self.get_sliding_legal(player_color, i, Piece.ROOK, blocking_moves)
+                elif self.current_board[player_color][i] == Piece.QUEEN:
+                    moves[i] = self.get_sliding_legal(player_color, i, Piece.QUEEN, blocking_moves)
+                elif self.current_board[player_color][i] == Piece.KING:
+                    moves[i] = self.get_king_legal(player_color, i, opp_attacks)
+        # Double check            
+        else: 
+            moves[king_square] = self.get_king_legal(player_color, king_square, opp_attacks)
+
+        if (moves.count(None) + moves.count([])) == 64:
+            self.game_over = True
+
         return moves
 
     # Get a list of moves from a 64 bit moveboard
@@ -339,10 +427,10 @@ class Engine():
 
         if capture:
             opp_color = None
-            opp_color = Piece.BLACK if piece_color == Piece.WHITE else opp_color == Piece.WHITE
+            opp_color = Piece.BLACK if piece_color == Piece.WHITE else Piece.WHITE
             while moveboard > 0:
                 square_to = self.get_lsb(moveboard)
-                captured_piece = self.all_pieces[opp_color][square_to]
+                captured_piece = self.current_board[opp_color][square_to]
                 move = Move(piece_color, piece_type, square_from, square_to, opp_color, captured_piece)
                 moves.append(move)
                 square_to = np.uint64(1) << np.uint64(square_to)
@@ -358,7 +446,7 @@ class Engine():
         return moves
 
     # Get king legal moves
-    def get_king_legal(self, piece_color, square_from):
+    def get_king_legal(self, piece_color, square_from, opp_attacks):
         moves = []
         opp_pieces = None
         occupied_squares = np.bitwise_or(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.BLACK])
@@ -394,17 +482,18 @@ class Engine():
                     moves.append(move)
 
         #Check for capture moves
-        capture_moves = np.bitwise_and(self.king_moves[square_from], opp_pieces)
+        legal_moves = np.bitwise_and(self.king_moves[square_from], np.bitwise_not(opp_attacks))
+        capture_moves = np.bitwise_and(legal_moves, opp_pieces)
         moves.extend(self.get_moves_from_moveboard(capture_moves, square_from, piece_color, Piece.KING, True))
 
         #Check for push moves
-        push_moves = np.bitwise_and(self.king_moves[square_from], np.bitwise_not(all_set))
+        push_moves = np.bitwise_and(legal_moves, np.bitwise_not(occupied_squares))
         moves.extend(self.get_moves_from_moveboard(push_moves, square_from, piece_color, Piece.KING))
 
         return moves
 
     # Get pawn legal moves
-    def get_pawn_legal(self, piece_color, square_from):
+    def get_pawn_legal(self, piece_color, square_from, blocking_moves=np.uint64(18446744073709551615)):
         moves = []
         opp_pieces = None
 
@@ -415,6 +504,7 @@ class Engine():
 
         # Check for capture moves
         capture_moves = np.bitwise_and(self.pawn_attacks[square_from][piece_color], opp_pieces)
+        capture_moves = np.bitwise_and(capture_moves, blocking_moves)
         moves.extend(self.get_moves_from_moveboard(capture_moves, square_from, piece_color, Piece.PAWN, True))
 
         # Check pawn blockers
@@ -431,12 +521,13 @@ class Engine():
         # Check for push moves
         push_moves = np.bitwise_and(blocker_mask, self.pawn_pushes[square_from][piece_color])
         push_moves = np.bitwise_xor(push_moves, self.pawn_pushes[square_from][piece_color])
+        push_moves = np.bitwise_and(push_moves, blocking_moves)
         moves.extend(self.get_moves_from_moveboard(push_moves, square_from, piece_color, Piece.PAWN))
 
         return moves
 
     # Get knight legal moves from a square
-    def get_knight_legal(self, piece_color, square_from):
+    def get_knight_legal(self, piece_color, square_from, blocking_moves=np.uint64(18446744073709551615)):
         moves = []
         opp_pieces = None
 
@@ -447,17 +538,19 @@ class Engine():
 
         ## Check for capture moves ##
         capture_moves = np.bitwise_and(self.knight_moves[square_from], opp_pieces)
+        capture_moves = np.bitwise_and(capture_moves, blocking_moves)
         moves.extend(self.get_moves_from_moveboard(capture_moves, square_from, piece_color, Piece.KNIGHT, True))
 
         ## Check for push moves ##
         occupied_squares = np.bitwise_not(np.bitwise_or(self.pieceBB[Piece.WHITE], self.pieceBB[Piece.BLACK]))
         push_moves = np.bitwise_and(occupied_squares, self.knight_moves[square_from]) 
+        push_moves = np.bitwise_and(push_moves, blocking_moves)
         moves.extend(self.get_moves_from_moveboard(push_moves, square_from, piece_color, Piece.KNIGHT))
         
         return moves
 
     # Get bishop legal moves from a square
-    def get_sliding_legal(self, piece_color, square_from, piece_type):
+    def get_sliding_legal(self, piece_color, square_from, piece_type, blocking_moves=np.uint64(18446744073709551615)):
         moves = []
         opp_pieces = None
 
@@ -488,11 +581,12 @@ class Engine():
 
         # Check for capture moves ##
         ignore_captures = np.bitwise_and(moveboard, opp_pieces)
-        capture_moves = ignore_captures
+        capture_moves = np.bitwise_and(ignore_captures, blocking_moves)
         moves.extend(self.get_moves_from_moveboard(capture_moves, square_from, piece_color, piece_type, True))
 
         # Remove blocker and check for push moves ##
         push_moves = np.bitwise_xor(moveboard, ignore_captures) 
+        push_moves = np.bitwise_and(push_moves, blocking_moves)
         moves.extend(self.get_moves_from_moveboard(push_moves, square_from, piece_color, piece_type))
 
         return moves
