@@ -384,7 +384,7 @@ class Engine():
                 # Check if its line check or diagonal check
                 attacker_moves = None
                 king_moves = None
-                if abs(king_square - attacker_square) == 8 or (king_square//8) == (attacker_square//8):
+                if abs(king_square - attacker_square) % 8 == 0 or (king_square//8) == (attacker_square//8):
                     attacker_moves = np.bitwise_and(self.rook_masks[attacker_square], occupied_squares)
                     attacker_moves = self.rook_moveboard[attacker_square][attacker_moves]
                     king_moves = np.bitwise_and(self.rook_masks[king_square], occupied_squares)
@@ -397,7 +397,6 @@ class Engine():
 
                 blocking_moves = np.bitwise_and(attacker_moves, king_moves)
                 blocking_moves = np.bitwise_or(np.uint64(1 << attacker_square), blocking_moves)
-
             # Add moves that block the check or king moves
             for i in range(len(moves)):
                 if self.current_board[player_color][i] == Piece.PAWN:

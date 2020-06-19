@@ -69,7 +69,6 @@ if __name__ == "__main__":
                             chess_game.move(move)
                             moves = chess_game.get_legal_moves(chess_game.player_turn)
                             board = chess_game.current_board
-                            print(chess_game.game_over)
                     piece_moves = None
                     piece_square = None
                 else:
