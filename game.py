@@ -2,13 +2,13 @@ import os
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide" 
 import pygame
 import math
-from engine import Engine, Piece, Square
+from chess_logic import Chess, Piece, Square
 
 SIZE = MAX_WIDTH, MAX_HEIGHT = 576, 576 
 FPS = 200
 
 if __name__ == "__main__":
-    chess_game = Engine()
+    chess_game = Chess()
     
     pygame.init()
     win = pygame.display.set_mode(SIZE)
